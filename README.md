@@ -1,57 +1,111 @@
-# Getting Started Todo App
+# 📊 Prometheus & Grafana Monitoring Stack
 
-This project provides a sample todo list application. It demonstrates all of
-the current Docker best practices, ranging from the Compose file, to the
-Dockerfile, to CI (using GitHub Actions), and running tests. It's intended to 
-be a well-documented to ensure anyone can come in and easily learn.
+A ready-to-use monitoring stack that integrates **Prometheus** and **Grafana** via Docker Compose. This setup allows you to collect, store, and visualize metrics from your applications or infrastructure efficiently.
 
-## Application architecture
+## 🚀 Features
 
-![image](https://github.com/docker/getting-started-todo-app/assets/313480/c128b8e4-366f-4b6f-ad73-08e6652b7c4d)
+* 📆 **Dockerized Setup**: Quick deployment with Docker Compose.
+* 📈 **Prometheus**: Time-series database for collecting metrics.
+* 📊 **Grafana**: Interactive dashboards for data visualization.
+* 🔧 **Pre-configured Dashboards**: Easily import or customize dashboards.
+* 🛠️ **Extensible**: Add exporters like Node Exporter, cAdvisor, or custom metrics endpoints.
 
-
-This sample application is a simple React frontend that receives data from a
-Node.js backend. 
-
-When the application is packaged and shipped, the frontend is compiled into
-static HTML, CSS, and JS and then bundled with the backend where it is then
-served as static assets. So no... there is no server-side rendering going on
-with this sample app.
-
-During development, since the backend and frontend need different dev tools, 
-they are split into two separate services. This allows [Vite](https://vitejs.dev/) 
-to manage the React app while [nodemon](https://nodemon.io/) works with the 
-backend. With containers, it's easy to separate the development needs!
-
-## Development
-
-To spin up the project, simply install Docker Desktop and then run the following 
-commands:
+## 📁 Project Structure
 
 ```
-git clone https://github.com/docker/getting-started-todo-app
-cd getting-started-todo-app
-docker compose up -d
+prometheus-grafana/
+├── docker-compose.yml
+├── prometheus/
+│   └── prometheus.yml
+├── grafana/
+│   └── provisioning/
+│       ├── datasources/
+│       │   └── datasource.yml
+│       └── dashboards/
+│           └── dashboard.json
+└── README.md
 ```
 
-You'll see several container images get downloaded from Docker Hub and, after a
-moment, the application will be up and running! No need to install or configure
-anything on your machine!
+## 🧰 Prerequisites
 
-Simply open to [http://localhost](http://localhost) to see the app up and running!
+* **Docker** installed on your machine.
+* **Docker Compose** installed.
 
-Any changes made to either the backend or frontend should be seen immediately
-without needing to rebuild or restart the containers.
+## ⚙️ Setup Instructions
 
-To help with the database, the development stack also includes phpMyAdmin, which
-can be access at [http://db.localhost](http://db.localhost) (most browsers will 
-resolve `*.localhost` correctly, so no hosts file changes should be required).
+1. **Clone the Repository**
 
-### Tearing it down
+   ```bash
+   git clone https://github.com/NahwngLe/prometheus-grafana.git
+   cd prometheus-grafana
+   ```
 
-When you're done, simply remove the containers by running the following command:
+2. **Start the Services**
 
+   ```bash
+   docker-compose up -d
+   ```
+
+   This command will:
+
+   * Launch Prometheus on [http://localhost:9090](http://localhost:9090)
+   * Launch Grafana on [http://localhost:3000](http://localhost:3000)
+
+3. **Access Grafana**
+
+   * Navigate to [http://localhost:3000](http://localhost:3000) in your browser.
+   * **Default Credentials**:
+
+     * Username: `admin`
+     * Password: `admin`
+   * Upon first login, you'll be prompted to change the password.
+
+4. **Import Dashboards**
+
+   * In Grafana, go to **"Dashboards" > "Import"**.
+   * You can import pre-configured dashboards from the `grafana/provisioning/dashboards/` directory or create your own.
+
+## 📡 Adding Exporters
+
+To monitor specific services or system metrics, you can add exporters:
+
+* **Node Exporter**: For system-level metrics.
+* **cAdvisor**: For container metrics.
+* **Custom Exporters**: For application-specific metrics.
+
+Update the `prometheus.yml` configuration file to include the new exporters:
+
+```yaml
+scrape_configs:
+  - job_name: 'node_exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
 ```
-docker compose down
+
+Ensure the exporter containers are running and accessible to Prometheus.
+
+## 🪯 Stopping and Cleaning Up
+
+To stop the services:
+
+```bash
+docker-compose down
 ```
-# prometheus-grafana
+
+To remove all containers, networks, and volumes:
+
+```bash
+docker-compose down --volumes
+```
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).
+
+## 🤝 Contributing
+
+Contributions are welcome! Please fork the repository and submit a pull request for any enhancements or bug fixes.
+
+## 📬 Contact
+
+For any questions or suggestions, feel free to open an issue or contact [NahwngLe](https://github.com/NahwngLe).
