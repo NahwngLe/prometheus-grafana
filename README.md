@@ -10,22 +10,6 @@ A ready-to-use monitoring stack that integrates **Prometheus** and **Grafana** v
 * 🔧 **Pre-configured Dashboards**: Easily import or customize dashboards.
 * 🛠️ **Extensible**: Add exporters like Node Exporter, cAdvisor, or custom metrics endpoints.
 
-## 📁 Project Structure
-
-```
-prometheus-grafana/
-├── docker-compose.yml
-├── prometheus/
-│   └── prometheus.yml
-├── grafana/
-│   └── provisioning/
-│       ├── datasources/
-│       │   └── datasource.yml
-│       └── dashboards/
-│           └── dashboard.json
-└── README.md
-```
-
 ## 🧰 Prerequisites
 
 * **Docker** installed on your machine.
