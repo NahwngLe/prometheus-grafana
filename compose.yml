@@ -1,0 +1,298 @@
+###################################################
+# This Compose file provides the development environment for the todo app.
+# 
+# Seeing the final version of the application bundles the frontend with the
+# backend, we are able to "simulate" that by using a proxy to route requests
+# to the appropriate service. All requests to /api will be routed to the 
+# backend while all other requests will be sent to the client service. While
+# there is some overlap in the routing rules, the proxy determines the service
+# based on the most specific rule.
+#
+# To support easier debugging and troubleshooting, phpMyAdmin is also included
+# to provide a web interface to the MySQL database.
+###################################################
+
+###################################################
+# Services
+#
+# The services define the individual components of our application stack.
+# For each service, a separate container will be launched.
+###################################################
+services:
+
+  ###################################################
+  # Service: proxy
+  #
+  # This service is a reverse proxy that will route requests to the appropriate
+  # service. Think of it like a HTTP router or a load balancer. It simply 
+  # forwards requests and allows us to simulate the final version of the 
+  # application where the frontend and backend are bundled together. We can 
+  # also use it to route requests to phpMyAdmin, which won't be accessible at 
+  # localhost, but at db.localhost.
+  #
+  # The image for this service comes directly from Docker Hub and is a Docker
+  # Official Image. Since Traefik can be configured in a variety of ways, we
+  # configure it here to watch the Docker events for new containers and to use
+  # their labels for configuration. That's why the Docker socket is mounted.
+  #
+  # We also expose port 80 to connect to the proxy from the host machine.
+  ###################################################
+  proxy:
+    image: traefik:v2.11
+    command: --providers.docker
+    ports:
+      - 80:80
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - monitoring
+
+  ###################################################
+  # Service: backend
+  # 
+  # This service is the Node.js server that provides the API for the app.
+  # When the container starts, it will use the image that results
+  # from building the Dockerfile, targeting the backend-dev stage.
+  #
+  # The Compose Watch configuration is used to automatically sync the code
+  # from the host machine to the container. This allows the server to be
+  # automatically reloaded when code changes are made.
+  #
+  # The environment variables configure the application to connect to the
+  # database, which is also configured in this Compose file. We obviously
+  # wouldn't hard-code these values in a production environment. But, in
+  # dev, these values are fine.
+  #
+  # Finally, the labels are used to configure Traefik (the reverse proxy) with
+  # the appropriate routing rules. In this case, all requests to localhost/api/*
+  # will be forwarded to this service's port 3000. 
+  ###################################################
+  backend:
+    build:
+      context: ./
+      target: backend-dev
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_USER: root
+      MYSQL_PASSWORD: secret
+      MYSQL_DB: todos
+    develop:
+      watch:
+        - path: ./backend/src
+          action: sync
+          target: /usr/local/app/src
+        - path: ./backend/package.json
+          action: rebuild
+    labels:
+      traefik.http.routers.backend.rule: Host(`localhost`) && PathPrefix(`/api`)
+      traefik.http.services.backend.loadbalancer.server.port: 3000
+    networks:
+      - monitoring
+
+  ###################################################
+  # Service: client
+  #
+  # The client service is the React app that provides the frontend for the app.
+  # When the container starts, it will use the image that results from building
+  # the Dockerfile, targeting the dev stage.
+  #
+  # The Compose Watch configuration is used to automatically sync the code from
+  # the host machine to the container. This allows the client to be automatically
+  # reloaded when code changes are made.
+  # 
+  # The labels are used to configure Traefik (the reverse proxy) with the 
+  # appropriate routing rules. In this case, all requests to localhost will be
+  # forwarded to this service's port 5173.
+  ###################################################
+  client:
+    build:
+      context: ./
+      target: client-dev
+    develop:
+      watch:
+        - path: ./client/src
+          action: sync
+          target: /usr/local/app/src
+        - path: ./client/package.json
+          action: rebuild
+    labels:
+      traefik.http.routers.client.rule: Host(`localhost`)
+      traefik.http.services.client.loadbalancer.server.port: 5173
+    networks:
+      - monitoring  
+
+  ###################################################
+  # Service: mysql
+  #
+  # The MySQL service is used to provide the database for the application.
+  # The image for this service comes directly from Docker Hub and is a Docker 
+  # Official Image.
+  
+  # The data is persisted in a volume named todo-mysql-data. Using a volume 
+  # allows us to take down the services without losing the data. When we start
+  # the services again, the data will still be there (assuming we didn't delete
+  # the volume, of course!).
+  #
+  # The environment variables configure the root password and the name of the
+  # database to create. Since these are used only for local development, it's
+  # ok to hard-code them here.
+  ###################################################
+  mysql:
+    image: mysql:8.0
+    volumes:
+      - todo-mysql-data:/var/lib/mysql
+    environment: 
+      MYSQL_ROOT_PASSWORD: secret
+      MYSQL_DATABASE: todos
+    networks:
+      - monitoring
+
+###################################################
+# Service: mysql-exporter
+###################################################
+  mysql-exporter:
+    image: prom/mysqld-exporter
+    command:
+      - '--web.listen-address=:9104'
+      - '--web.telemetry-path=/metrics'
+      - '--mysqld.address=mysql:3306'
+      - '--mysqld.username=root'
+    environment:
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=secret
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - DATA_SOURCE_NAME=root:secret@tcp(mysql:3306)/
+    depends_on:
+      - mysql
+    ports:
+      - 9104:9104
+    labels:
+      - traefik.http.routers.mysql-exporter.rule=Host(`mysql-metrics.localhost`)
+      - traefik.http.services.mysql-exporter.loadbalancer.server.port=9104
+    networks:
+      - monitoring
+    
+
+  ###################################################
+  # Service: phpmyadmin
+  #
+  # This service provides a web interface to the MySQL database. It's useful
+  # for debugging and troubleshooting data, schemas, and more. The image for 
+  # this service comes directly from Docker Hub and is a Docker Official Image.
+  #
+  # The environment variables configure the connection to the database and 
+  # provide the default credentials, letting us immediately open the interface
+  # without needing to log in.
+  #
+  # The labels are used to configure Traefik (the reverse proxy) with the
+  # routing rules. In this case, all requests to db.localhost will be forwarded
+  # to this service's port 80.
+  ###################################################
+  phpmyadmin:
+    image: phpmyadmin
+    environment:
+      PMA_HOST: mysql
+      PMA_USER: root
+      PMA_PASSWORD: secret
+    labels:
+      traefik.http.routers.phpmyadmin.rule: Host(`db.localhost`)
+      traefik.http.services.phpmyadmin.loadbalancer.server.port: 80
+    networks:
+      - monitoring
+
+  ###################################################
+  # Service: Prometheus
+  ###################################################
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./alert.rules.yml:/etc/prometheus/alert.rules.yml:ro
+    labels:
+      traefik.http.routers.prometheus.rule: Host(`metrics.localhost`)
+      traefik.http.services.prometheus.loadbalancer.server.port: 9090
+    networks:
+      - monitoring
+
+  ###################################################
+  # Service: Grafana
+  ###################################################
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    labels:
+      - traefik.http.routers.grafana.rule=Host(`grafana.localhost`)
+      - traefik.http.services.grafana.loadbalancer.server.port=3000
+    networks:
+      - monitoring
+
+###################################################
+# Service: node-exporter 
+# This service provides a Node Exporter for Prometheus by using the node-exporter image.
+# The image for this service comes directly from Docker Hub and is a Docker
+# Official Image. The node-exporter service provides a web interface to monitor
+# the performance of the host machine. It provides metrics such as CPU usage,
+# memory usage, network I/O, and more. This service is useful for monitoring
+# the performance of the application stack.
+###################################################
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: monitoring_node_exporter
+    restart: unless-stopped
+    expose:
+      - 9100
+    labels:
+      - traefik.http.routers.cadvisor.rule=Host(`node-exporter.localhost`)
+      - traefik.http.services.cadvisor.loadbalancer.server.port=9100
+    networks:
+      - monitoring
+
+###################################################
+# Service: Cadvisor
+
+# This service provides a Docker Exporter for Prometheus by using the cAdvisor image.
+# The image for this service comes directly from Docker Hub and is a Docker
+# Official Image. The cAdvisor service provides a web interface to monitor
+# the performance of the Docker containers. 
+
+# It provides metrics such as CPU usage, memory usage, network I/O, and more.
+# This service is useful for monitoring the performance of the application stack.
+###################################################
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    labels:
+      - traefik.http.routers.cadvisor.rule=Host(`cadvisor.localhost`)
+      - traefik.http.services.cadvisor.loadbalancer.server.port=8080
+    networks:
+      - monitoring
+
+###################################################
+# Volumes
+#
+# For this application stack, we only have one volume. It's used to persist the
+# data for the MySQL service. We are only going to use the default values,
+# hence the lack of any configuration for the volume.
+###################################################
+volumes:
+  todo-mysql-data:
+  grafana-data:
+
+networks:
+  monitoring:
